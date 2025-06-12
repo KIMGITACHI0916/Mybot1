@@ -11,7 +11,6 @@ bot = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
 
 # === In-Memory Storage ===
 flood_tracker = {}
-approved_users = set()
 
 # === /start ===
 @bot.on(events.NewMessage(pattern='/start'))
@@ -21,6 +20,8 @@ async def start(event):
 # === /ban ===
 @bot.on(events.NewMessage(pattern='/ban'))
 async def ban(event):
+    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+        return await event.reply("I don't have admin rights to perform this action.")
     if event.is_reply:
         user = await event.get_reply_message().get_sender()
         await bot(functions.channels.EditBannedRequest(
@@ -33,6 +34,8 @@ async def ban(event):
 # === /mute ===
 @bot.on(events.NewMessage(pattern='/mute'))
 async def mute(event):
+    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+        return await event.reply("I don't have admin rights to perform this action.")
     if event.is_reply:
         user = await event.get_reply_message().get_sender()
         await bot(functions.channels.EditBannedRequest(
@@ -45,6 +48,8 @@ async def mute(event):
 # === /kick ===
 @bot.on(events.NewMessage(pattern='/kick'))
 async def kick(event):
+    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+        return await event.reply("I don't have admin rights to perform this action.")
     if event.is_reply:
         user = await event.get_reply_message().get_sender()
         await bot(functions.channels.EditBannedRequest(
@@ -63,6 +68,8 @@ async def kick(event):
 # === /tmute command ===
 @bot.on(events.NewMessage(pattern=r"/tmute (\d+)([smhd])"))
 async def tmute(event):
+    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+        return await event.reply("I don't have admin rights to perform this action.")
     if event.is_reply:
         time_val = int(event.pattern_match.group(1))
         unit = event.pattern_match.group(2)
@@ -79,6 +86,8 @@ async def tmute(event):
 # === /tban command ===
 @bot.on(events.NewMessage(pattern=r"/tban (\d+)([smhd])"))
 async def tban(event):
+    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+        return await event.reply("I don't have admin rights to perform this action.")
     if event.is_reply:
         time_val = int(event.pattern_match.group(1))
         unit = event.pattern_match.group(2)
@@ -116,14 +125,15 @@ async def user_info(event):
     name = user.first_name or "None"
     username = f"@{user.username}" if user.username else "None"
     link = f"tg://user?id={user.id}"
-    approved = "Approved" if user.id in approved_users else "Not Approved"
-    
-    msg = f"User info:\nID: [{user.id}](tg://user?id={user.id})\nFirst Name: {name}\nUsername: {username}\nUser link: [Click here]({link})\nStatus: {approved}"
+
+    msg = f"User info:\nID: [{user.id}](tg://user?id={user.id})\nFirst Name: {name}\nUsername: {username}\nUser link: [Click here]({link})"
     await event.reply(msg, link_preview=False)
 
 # === /pin ===
 @bot.on(events.NewMessage(pattern='/pin'))
 async def pin_msg(event):
+    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+        return await event.reply("I don't have admin rights to pin messages.")
     if event.is_reply:
         await bot.pin_message(event.chat_id, event.reply_to_msg_id)
         await event.reply("Message pinned.")
@@ -131,6 +141,8 @@ async def pin_msg(event):
 # === /purge ===
 @bot.on(events.NewMessage(pattern='/purge'))
 async def purge(event):
+    if not (await event.client.get_permissions(event.chat_id, event.sender_id)).is_admin:
+        return await event.reply("Only admins can use this command.")
     if event.is_reply:
         start = event.reply_to_msg_id
         end = event.id
@@ -143,3 +155,4 @@ async def purge(event):
 
 print("Bot started")
 bot.run_until_disconnected()
+        
