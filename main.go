@@ -7,9 +7,8 @@ import (
 )
 
 func main() {
-	// Run bot.py in background
 	go func() {
-		cmd := exec.Command("python", "bot.py") // ✅ use "python" not "python3"
+		cmd := exec.Command("python3", "bot.py")
 		cmd.Stdout = log.Writer()
 		cmd.Stderr = log.Writer()
 		if err := cmd.Run(); err != nil {
@@ -17,9 +16,8 @@ func main() {
 		}
 	}()
 
-	// Railway healthcheck
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Bot is running."))
+		w.Write([]byte("Bot is running"))
 	})
 
 	log.Println("Starting Go server on port 8080...")
