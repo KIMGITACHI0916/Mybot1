@@ -141,7 +141,7 @@ async def tmute(event):
         await bot(functions.channels.EditBannedRequest(
             event.chat_id,
             user.id,
-            types.ChatBannedRights(until_date=time.time() + seconds, send_messages=True)
+            types.ChatBannedRights(until_date=int(time.time()) + seconds, send_messages=True)
         ))
         await event.reply(f"Muted for {time_val}{unit}")
 
@@ -162,7 +162,7 @@ async def tban(event):
         await bot(functions.channels.EditBannedRequest(
             event.chat_id,
             user.id,
-            types.ChatBannedRights(until_date=time.time() + seconds, view_messages=True)
+            types.ChatBannedRights(until_date=int(time.time()) + seconds, view_messages=True)
         ))
         await event.reply(f"Banned for {time_val}{unit}")
 
@@ -186,7 +186,12 @@ async def flood_control(event):
     history.append(now)
     flood_tracker[user_id] = history
     if len(history) > 5:
-        await event.respond("Stop spamming or you may be muted!")
+        await bot(functions.channels.EditBannedRequest(
+            event.chat_id,
+            user_id,
+            types.ChatBannedRights(send_messages=True)
+        ))
+        await event.respond("You have been muted for spamming.")
 
 # === /info ===
 @bot.on(events.NewMessage(pattern='/info'))
@@ -259,4 +264,4 @@ async def tag_all(event):
 
 print("Bot started")
 bot.run_until_disconnected()
-                          
+        
