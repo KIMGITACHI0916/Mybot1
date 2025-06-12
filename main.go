@@ -9,7 +9,7 @@ import (
 func main() {
 	// Run bot.py in background
 	go func() {
-		cmd := exec.Command("python3", "bot.py")
+		cmd := exec.Command("python", "bot.py") // ✅ use "python" not "python3"
 		cmd.Stdout = log.Writer()
 		cmd.Stderr = log.Writer()
 		if err := cmd.Run(); err != nil {
