@@ -174,11 +174,11 @@ async def pin_unpin(event):
             await event.reply("Message unpinned.")
     except Exception as e:
         await event.reply(f"Failed to {command} message: {str(e)}")
-
+# afk 
 @bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
 async def set_afk(event):
     user_id = event.sender_id
-    reason = event.pattern_match.group(1) or "AFK"
+    reason = event.pattern_match.group(1) or ""
     AFK_USERS[user_id] = {
         "reason": reason,
         "since": datetime.now(),
@@ -188,7 +188,6 @@ async def set_afk(event):
     name = sender.first_name or "User"
     await event.reply(f"{name} is now AFK: {reason}")
 
-# afk
 @bot.on(events.NewMessage(incoming=True))
 async def check_afk(event):
     sender_id = event.sender_id
@@ -210,7 +209,7 @@ async def check_afk(event):
             if afk_data.get("is_afk"):
                 user = await replied_msg.get_sender()
                 name = user.first_name or "User"
-                reason = afk_data.get("reason", "AFK")
+                reason = afk_data.get("reason", "")
                 await event.reply(f"{name} is AFK: {reason}")
 
     # Notify when mentioning an AFK user
@@ -222,7 +221,7 @@ async def check_afk(event):
                 if afk_data.get("is_afk"):
                     user = await bot.get_entity(uid)
                     name = user.first_name or "User"
-                    reason = afk_data.get("reason", "AFK")
+                    reason = afk_data.get("reason", "")
                     await event.reply(f"{name} is AFK: {reason}")
                     
 print("Bot is running...")
