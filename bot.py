@@ -16,6 +16,7 @@ temp_mutes = {}
 tagall_running = {}
 antiflood_enabled = {}
 flood_punishment = {}
+afks = {}
 
 # === Utility: Check Admin ===
 async def is_admin(event):
