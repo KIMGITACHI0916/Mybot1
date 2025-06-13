@@ -1,4 +1,6 @@
 from telethon import TelegramClient, events, functions, types
+from datetime import datetime
+from collections import defaultdict
 import asyncio
 import time
 import os
@@ -16,7 +18,7 @@ temp_mutes = {}
 tagall_running = {}
 antiflood_enabled = {}
 flood_punishment = {}
-afks = {}
+AFK_USERS = defaultdict(dict)
 
 # === Utility: Check Admin ===
 async def is_admin(event):
@@ -40,40 +42,45 @@ async def start_cmd(event):
     await event.reply("Bot is online!")
 
 # === /afk ===
-# === /afk ===
 @bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
-async def afk_cmd(event):
+async def set_afk(event):
+    user_id = event.sender_id
     reason = event.pattern_match.group(1) or "AFK"
-    afks[event.sender_id] = (time.time(), reason)
+    AFK_USERS[user_id] = {
+        "reason": reason,
+        "since": datetime.now(),
+        "is_afk": True
+    }
     await event.reply(f"You are now AFK: {reason}")
 
-# === AFK Mention Checker & Return Detector ===
-@bot.on(events.NewMessage())
-async def handle_afk(event):
-    if event.is_private:
-        return
+@bot.on(events.NewMessage(incoming=True))
+async def check_afk(event):
+    sender_id = event.sender_id
 
-    # Remove AFK if the sender was AFK
-    if event.sender_id in afks:
-        del afks[event.sender_id]
-        await event.reply("Welcome back! Removed AFK status.")
+    # If an AFK user sends a message (not AFK command), remove AFK
+    if sender_id in AFK_USERS and AFK_USERS[sender_id].get("is_afk"):
+        if not event.raw_text.startswith("/afk"):
+            AFK_USERS[sender_id]["is_afk"] = False
+            await event.reply("Welcome back! Removed AFK status.")
 
-    # Check if mentioned users are AFK
-    if event.message.entities:
-        for entity in event.message.entities:
-            user_id = None
-            if isinstance(entity, types.MessageEntityMentionName):
-                user_id = entity.user_id
-            elif isinstance(entity, types.MessageEntityMention):
-                username = event.raw_text[entity.offset:entity.offset + entity.length].lstrip("@")
-                try:
-                    user = await bot.get_entity(username)
-                    user_id = user.id
-                except:
-                    continue
-            if user_id and user_id in afks:
-                _, reason = afks[user_id]
-                await event.reply(f"The user is AFK: {reason}")
+    # Notify when replying or mentioning an AFK user
+    if event.is_reply:
+        replied_msg = await event.get_reply_message()
+        if replied_msg:
+            replied_user = replied_msg.sender_id
+            afk_data = AFK_USERS.get(replied_user, {})
+            if afk_data.get("is_afk"):
+                reason = afk_data.get("reason", "AFK")
+                await event.reply(f"This user is AFK: {reason}")
+
+    elif event.message.mentioned:
+        for entity in event.message.entities or []:
+            if hasattr(entity, 'user_id'):
+                uid = entity.user_id
+                afk_data = AFK_USERS.get(uid, {})
+                if afk_data.get("is_afk"):
+                    reason = afk_data.get("reason", "AFK")
+                    await event.reply(f"User is AFK: {reason}")
 
 # === /ban ===
 @bot.on(events.NewMessage(pattern=r"/ban"))
