@@ -179,18 +179,22 @@ async def tban_cmd(event):
     units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
     seconds = time_val * units[unit]
 
-    user = await event.get_reply_message()
-    until_time = int(time.time()) + seconds
+    user_msg = await event.get_reply_message()
+    if not user_msg:
+        return await event.reply("Couldn't get replied user.")
 
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.sender_id,
-        types.ChatBannedRights(
-            until_date=until_time,
-            view_messages=True
-        )
-    ))
-    await event.reply(f"User banned for {time_val}{unit}.")
+    try:
+        await bot(functions.channels.EditBannedRequest(
+            event.chat_id,
+            user_msg.sender_id,
+            types.ChatBannedRights(
+                until_date=int(time.time()) + seconds,
+                view_messages=True
+            )
+        ))
+        await event.reply(f"User banned for {time_val}{unit}.")
+    except Exception as e:
+        await event.reply(f"Error banning user: {e}")
 
 # === /tban ===
 @bot.on(events.NewMessage(pattern=r"/tban (\d+)([smhd])"))
