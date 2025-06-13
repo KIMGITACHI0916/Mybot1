@@ -195,7 +195,7 @@ async def check_afk(event):
 
     # If an AFK user sends a message (not an /afk command), remove AFK only if it's not /afk
     if sender_id in AFK_USERS and AFK_USERS[sender_id].get("is_afk"):
-        if not event.raw_text.strip().lower().startswith("/afk"):
+        if not event.raw_text.strip().lower().startswith(""):
             AFK_USERS[sender_id]["is_afk"] = False
             sender = await event.get_sender()
             name = sender.first_name or "User"
