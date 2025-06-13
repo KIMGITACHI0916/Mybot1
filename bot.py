@@ -81,30 +81,26 @@ async def flood_control(event):
                 rights = types.ChatBannedRights(until_date=None, view_messages=True)
                 reason = "banned"
             elif action == "tmute":
-                until = int(time.time()) + 300
+                until = int(time.time()) + 300  # 5 minutes
                 rights = types.ChatBannedRights(until_date=until, send_messages=True)
-                reason = "temporarily muted (5 mins)"
+                reason = "muted for 5 minutes"
 
             if rights:
                 await bot(functions.channels.EditBannedRequest(chat_id, user_id, rights))
 
-            # Delete all recent messages
-            deleted_count = 0
             async for msg in bot.iter_messages(chat_id, from_user=user_id, limit=100):
                 try:
                     await msg.delete()
-                    deleted_count += 1
                 except:
                     continue
 
-            await event.respond(
-                f"User [ID {user_id}](tg://user?id={user_id}) has been {reason} for flooding.\nDeleted {deleted_count} messages.",
-                parse_mode="md"
-            )
+            await event.respond(f"User [ID {user_id}](tg://user?id={user_id}) has been {reason} for flooding.", parse_mode='md')
             flood_tracker[(chat_id, user_id)] = []
 
         except errors.ChatAdminRequiredError:
             await event.respond("I don't have rights to mute or delete messages. Please make me admin with ban rights.")
+        except errors.BotMethodInvalidError:
+            await event.respond("Flood control failed: Method not allowed for bots. Please ensure the bot has full rights.")
         except Exception as e:
             await event.respond(f"Error during antiflood action: {str(e)}")
 
@@ -236,6 +232,7 @@ async def remove_afk(event):
         name = AFK_USERS[user_id]["name"]
         del AFK_USERS[user_id]
         await event.reply(f"Welcome back! {name}")
+
         
                     
 print("Bot is running...")
