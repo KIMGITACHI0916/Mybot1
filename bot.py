@@ -17,7 +17,7 @@ if not all([api_id, api_hash, bot_token]):
 api_id = int(api_id)
 
 # === Start Telegram Bot ===
-bot = TelegramClient('bot', api_id, api_hash)
+bot = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
 
 # === In-Memory Storage ===
 flood_tracker = {}
@@ -50,7 +50,7 @@ async def start_cmd(event):
     await event.reply("Bot is online!")
 
 # === /afk ===
-@bot.on(events.NewMessage(pattern=r"/afk(?:\\s+(.*))?"))
+@bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
 async def set_afk(event):
     user_id = event.sender_id
     reason = event.pattern_match.group(1) or ""
@@ -94,131 +94,61 @@ async def check_afk(event):
                     name = user.first_name or "User"
                     reason = afk_data.get("reason", "AFK")
                     await event.reply(f"{name} is AFK: {reason}")
-                    
-# === /ban ===
-@bot.on(events.NewMessage(pattern=r"/ban"))
+
+# === Moderation: ban, mute, kick, unban, unmute ===
+async def ban_user(event, user_id, rights):
+    await bot(functions.channels.EditBannedRequest(event.chat_id, user_id, rights))
+
+@bot.on(events.NewMessage(pattern=r"/(ban|mute|kick|unban|unmute)"))
 @admin_only
-async def ban_cmd(event):
+async def mod_cmd(event):
     if not event.is_reply:
-        return await event.reply("Reply to a user to ban.")
+        return await event.reply("Reply to a user to execute command.")
+
+    cmd = event.pattern_match.group(1)
     user = await event.get_reply_message().get_sender()
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights(view_messages=True)
-    ))
-    await event.reply("User banned.")
+    uid = user.id
 
-# === /unban ===
-@bot.on(events.NewMessage(pattern=r"/unban"))
+    if cmd == "ban":
+        rights = types.ChatBannedRights(view_messages=True)
+    elif cmd == "mute":
+        rights = types.ChatBannedRights(send_messages=True)
+    elif cmd == "kick":
+        rights = types.ChatBannedRights(view_messages=True)
+        await ban_user(event, uid, rights)
+        await asyncio.sleep(1)
+        rights = types.ChatBannedRights()
+    elif cmd in ["unban", "unmute"]:
+        rights = types.ChatBannedRights()
+    else:
+        return
+
+    await ban_user(event, uid, rights)
+    await event.reply(f"User {cmd}ed.")
+
+# === /tban and /tmute ===
+@bot.on(events.NewMessage(pattern=r"/(tban|tmute) (\\d+)([smhd])"))
 @admin_only
-async def unban_cmd(event):
+async def temp_mod_cmd(event):
     if not event.is_reply:
-        return await event.reply("Reply to a user to unban.")
-    user = await event.get_reply_message().get_sender()
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights()
-    ))
-    await event.reply("User unbanned.")
+        return await event.reply("Reply to a user to use temporary moderation.")
 
-# === /mute ===
-@bot.on(events.NewMessage(pattern=r"/mute"))
-@admin_only
-async def mute_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user to mute.")
-    user = await event.get_reply_message().get_sender()
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights(send_messages=True)
-    ))
-    await event.reply("User muted.")
-
-# === /unmute ===
-@bot.on(events.NewMessage(pattern=r"/unmute"))
-@admin_only
-async def unmute_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user to unmute.")
-    user = await event.get_reply_message().get_sender()
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights()
-    ))
-    await event.reply("User unmuted.")
-
-# === /kick ===
-@bot.on(events.NewMessage(pattern=r"/kick"))
-@admin_only
-async def kick_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user to kick.")
-    user = await event.get_reply_message().get_sender()
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights(view_messages=True)
-    ))
-    await asyncio.sleep(1)
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights()
-    ))
-    await event.reply("User kicked.")
-
-# === /tmute ===
-@bot.on(events.NewMessage(pattern=r"/tban (\d+)([smhd])"))
-@admin_only
-async def tban_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user's message to ban them.")
-
-    time_val = int(event.pattern_match.group(1))
-    unit = event.pattern_match.group(2)
-    units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-    seconds = time_val * units[unit]
-
-    user_msg = await event.get_reply_message()
-    if not user_msg:
-        return await event.reply("Couldn't get replied user.")
-
-    try:
-        await bot(functions.channels.EditBannedRequest(
-            event.chat_id,
-            user_msg.sender_id,
-            types.ChatBannedRights(
-                until_date=int(time.time()) + seconds,
-                view_messages=True
-            )
-        ))
-        await event.reply(f"User banned for {time_val}{unit}.")
-    except Exception as e:
-        await event.reply(f"Error banning user: {e}")
-
-# === /tban ===
-@bot.on(events.NewMessage(pattern=r"/tban (\d+)([smhd])"))
-@admin_only
-async def tban_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user to temporarily ban.")
-    time_val = int(event.pattern_match.group(1))
-    unit = event.pattern_match.group(2)
+    cmd = event.pattern_match.group(1)
+    time_val = int(event.pattern_match.group(2))
+    unit = event.pattern_match.group(3)
     units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
     seconds = time_val * units[unit]
     user = await event.get_reply_message().get_sender()
-    await bot(functions.channels.EditBannedRequest(
-        event.chat_id,
-        user.id,
-        types.ChatBannedRights(until_date=int(time.time()) + seconds, view_messages=True)
-    ))
-    await event.reply(f"User banned for {time_val}{unit}.")
 
-# === /antiflood on/off ===
+    if cmd == "tban":
+        rights = types.ChatBannedRights(until_date=int(time.time()) + seconds, view_messages=True)
+    else:
+        rights = types.ChatBannedRights(until_date=int(time.time()) + seconds, send_messages=True)
+
+    await ban_user(event, user.id, rights)
+    await event.reply(f"User {cmd}d for {time_val}{unit}.")
+
+# === Anti-flood ===
 @bot.on(events.NewMessage(pattern=r"/antiflood (on|off)"))
 @admin_only
 async def toggle_antiflood(event):
@@ -226,7 +156,6 @@ async def toggle_antiflood(event):
     antiflood_enabled[event.chat_id] = (state == "on")
     await event.reply(f"Antiflood has been turned {state}.")
 
-# === /setflood (mute|ban) ===
 @bot.on(events.NewMessage(pattern=r"/setflood (mute|ban)"))
 @admin_only
 async def set_flood_punishment(event):
@@ -234,7 +163,6 @@ async def set_flood_punishment(event):
     flood_punishment[event.chat_id] = method
     await event.reply(f"Flood punishment set to {method}.")
 
-# === Anti-flood ===
 @bot.on(events.NewMessage())
 async def flood_control(event):
     if event.is_private or not antiflood_enabled.get(event.chat_id):
@@ -247,12 +175,9 @@ async def flood_control(event):
     flood_tracker[(event.chat_id, user_id)] = history
     if len(history) > 5:
         action = flood_punishment.get(event.chat_id, "mute")
-        if action == "mute":
-            rights = types.ChatBannedRights(until_date=None, send_messages=True)
-        else:
-            rights = types.ChatBannedRights(until_date=None, view_messages=True)
+        rights = types.ChatBannedRights(send_messages=True) if action == "mute" else types.ChatBannedRights(view_messages=True)
         try:
-            await bot(functions.channels.EditBannedRequest(event.chat_id, user_id, rights))
+            await ban_user(event, user_id, rights)
             await event.respond(f"User [{user_id}](tg://user?id={user_id}) has been {action}d for spamming.", parse_mode='md')
         except:
             await event.respond("I don't have enough rights to apply flood punishment.")
@@ -260,15 +185,8 @@ async def flood_control(event):
 # === /info ===
 @bot.on(events.NewMessage(pattern=r"/info"))
 async def info_cmd(event):
-@bot.on(events.NewMessage(pattern=r"/info"))
-async def info_cmd(event):
-    if event.is_reply:
-        replied_user = (await event.get_reply_message()).sender
-    else:
-        replied_user = event.sender
-
+    replied_user = (await event.get_reply_message()).sender if event.is_reply else event.sender
     user_link = f"tg://user?id={replied_user.id}"
-    
     msg = (
         f"<b>User info:</b>\n"
         f"<b>ID:</b> <code>{replied_user.id}</code>\n"
@@ -276,7 +194,6 @@ async def info_cmd(event):
         f"<b>Username:</b> @{replied_user.username if replied_user.username else 'N/A'}\n"
         f"<b>User link:</b> <a href=\"{user_link}\">link</a>"
     )
-    
     await event.reply(msg, parse_mode='html')
 
 # === /purge ===
@@ -320,7 +237,7 @@ async def cancel_cmd(event):
 @bot.on(events.NewMessage(pattern=r"/all"))
 @admin_only
 async def tag_all_cmd(event):
-    if not (await event.client.get_permissions(event.chat_id, 'me')).is_admin:
+    if not (await bot.get_permissions(event.chat_id, 'me')).is_admin:
         return await event.reply("I don't have permission to tag everyone.")
     tagall_running[event.chat_id] = True
     async for user in bot.iter_participants(event.chat_id):
@@ -337,4 +254,4 @@ async def tag_all_cmd(event):
 
 print("Bot started")
 bot.run_until_disconnected()
-    
+            
