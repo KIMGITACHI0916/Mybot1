@@ -65,7 +65,7 @@ async def check_afk(event):
             AFK_USERS[sender_id]["is_afk"] = False
             sender = await event.get_sender()
             name = sender.first_name or "User"
-            await event.reply(f"Welcome back, {name}! Removed AFK status.")
+            await event.reply(f"Welcome back, {name}!")
 
     # Notify when replying to an AFK user
     if event.is_reply:
