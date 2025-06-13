@@ -1,15 +1,23 @@
-from telethon import TelegramClient, events, functions, types
-from datetime import datetime
-from collections import defaultdict
+import os
 import asyncio
 import time
-import os
+from datetime import datetime
+from collections import defaultdict
+from telethon import TelegramClient, events, functions, types
 
-api_id = int(os.getenv("API_ID"))
+# === Load environment variables ===
+api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
 
-bot = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
+if not all([api_id, api_hash, bot_token]):
+    print("[ERROR] Missing API_ID, API_HASH, or BOT_TOKEN environment variable.")
+    exit(1)
+
+api_id = int(api_id)
+
+# === Start Telegram Bot ===
+bot = TelegramClient('bot', api_id, api_hash)
 
 # === In-Memory Storage ===
 flood_tracker = {}
@@ -42,7 +50,7 @@ async def start_cmd(event):
     await event.reply("Bot is online!")
 
 # === /afk ===
-@bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
+@bot.on(events.NewMessage(pattern=r"/afk(?:\\s+(.*))?"))
 async def set_afk(event):
     user_id = event.sender_id
     reason = event.pattern_match.group(1) or ""
@@ -58,8 +66,6 @@ async def set_afk(event):
 @bot.on(events.NewMessage(incoming=True))
 async def check_afk(event):
     sender_id = event.sender_id
-
-    # If an AFK user sends a message (not an /afk command), remove AFK only if it's not /afk
     if sender_id in AFK_USERS and AFK_USERS[sender_id].get("is_afk"):
         if not event.raw_text.strip().lower().startswith("/afk"):
             AFK_USERS[sender_id]["is_afk"] = False
@@ -67,7 +73,6 @@ async def check_afk(event):
             name = sender.first_name or "User"
             await event.reply(f"Welcome back, {name}!")
 
-    # Notify when replying to an AFK user
     if event.is_reply:
         replied_msg = await event.get_reply_message()
         if replied_msg:
@@ -79,7 +84,6 @@ async def check_afk(event):
                 reason = afk_data.get("reason", "AFK")
                 await event.reply(f"{name} is AFK: {reason}")
 
-    # Notify when mentioning an AFK user
     elif event.message.mentioned:
         for entity in event.message.entities or []:
             if hasattr(entity, 'user_id'):
@@ -90,7 +94,7 @@ async def check_afk(event):
                     name = user.first_name or "User"
                     reason = afk_data.get("reason", "AFK")
                     await event.reply(f"{name} is AFK: {reason}")
-
+                    
 # === /ban ===
 @bot.on(events.NewMessage(pattern=r"/ban"))
 @admin_only
