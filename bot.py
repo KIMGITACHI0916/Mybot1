@@ -20,7 +20,7 @@ api_id = int(api_id)
 bot = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
 
 # === In-Memory Storage ===
-flood_tracker = {}
+flood_tracker = defaultdict(list)
 temp_bans = {}
 temp_mutes = {}
 tagall_running = {}
@@ -127,7 +127,7 @@ async def mod_cmd(event):
     await event.reply(f"User {cmd}ed.")
 
 # === /tban and /tmute ===
-@bot.on(events.NewMessage(pattern=r"/(tban|tmute) (\\d+)([smhd])"))
+@bot.on(events.NewMessage(pattern=r"/(tban|tmute) (\d+)([smhd])"))
 @admin_only
 async def temp_mod_cmd(event):
     if not event.is_reply:
@@ -138,7 +138,8 @@ async def temp_mod_cmd(event):
     unit = event.pattern_match.group(3)
     units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
     seconds = time_val * units[unit]
-    user = await event.get_reply_message().get_sender()
+    user_msg = await event.get_reply_message()
+    user = await user_msg.get_sender()
 
     if cmd == "tban":
         rights = types.ChatBannedRights(until_date=int(time.time()) + seconds, view_messages=True)
@@ -146,7 +147,16 @@ async def temp_mod_cmd(event):
         rights = types.ChatBannedRights(until_date=int(time.time()) + seconds, send_messages=True)
 
     await ban_user(event, user.id, rights)
-    await event.reply(f"User {cmd}d for {time_val}{unit}.")
+
+    # Delete all messages from user in last 100 messages
+    async for msg in bot.iter_messages(event.chat_id, limit=100):
+        if msg.sender_id == user.id:
+            try:
+                await bot.delete_messages(event.chat_id, msg.id)
+            except:
+                pass
+
+    await event.reply(f"User {cmd}d for {time_val}{unit} and messages deleted.")
 
 # === Anti-flood ===
 @bot.on(events.NewMessage(pattern=r"/antiflood (on|off)"))
@@ -163,24 +173,33 @@ async def set_flood_punishment(event):
     flood_punishment[event.chat_id] = method
     await event.reply(f"Flood punishment set to {method}.")
 
-@bot.on(events.NewMessage())
+@bot.on(events.NewMessage(incoming=True))
 async def flood_control(event):
     if event.is_private or not antiflood_enabled.get(event.chat_id):
         return
     user_id = event.sender_id
     now = time.time()
-    history = flood_tracker.get((event.chat_id, user_id), [])
-    history = [msg for msg in history if now - msg < 10]
+    chat_user_key = (event.chat_id, user_id)
+    history = flood_tracker[chat_user_key]
+    history = [t for t in history if now - t < 10]
     history.append(now)
-    flood_tracker[(event.chat_id, user_id)] = history
+    flood_tracker[chat_user_key] = history
+
     if len(history) > 5:
-        action = flood_punishment.get(event.chat_id, "mute")
-        rights = types.ChatBannedRights(send_messages=True) if action == "mute" else types.ChatBannedRights(view_messages=True)
+        # Always apply tmute 5m
+        mute_rights = types.ChatBannedRights(until_date=int(time.time()) + 300, send_messages=True)
         try:
-            await ban_user(event, user_id, rights)
-            await event.respond(f"User [{user_id}](tg://user?id={user_id}) has been {action}d for spamming.", parse_mode='md')
+            await ban_user(event, user_id, mute_rights)
+            async for msg in bot.iter_messages(event.chat_id, limit=100):
+                if msg.sender_id == user_id:
+                    try:
+                        await bot.delete_messages(event.chat_id, msg.id)
+                    except:
+                        pass
+            await event.respond(f"User [{user_id}](tg://user?id={user_id}) has been muted for 5m for flooding.", parse_mode='md')
+            flood_tracker[chat_user_key] = []
         except:
-            await event.respond("I don't have enough rights to apply flood punishment.")
+            await event.respond("I don't have enough rights to mute for flood.")
 
 # === /info ===
 @bot.on(events.NewMessage(pattern=r"/info"))
@@ -254,4 +273,4 @@ async def tag_all_cmd(event):
 
 print("Bot started")
 bot.run_until_disconnected()
-            
+    
