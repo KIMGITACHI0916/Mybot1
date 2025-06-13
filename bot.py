@@ -45,7 +45,7 @@ async def start_cmd(event):
 @bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
 async def set_afk(event):
     user_id = event.sender_id
-    reason = event.pattern_match.group(1) or "AFK"
+    reason = event.pattern_match.group(1) or ""
     AFK_USERS[user_id] = {
         "reason": reason,
         "since": datetime.now(),
@@ -61,7 +61,7 @@ async def check_afk(event):
     if sender_id in AFK_USERS and AFK_USERS[sender_id].get("is_afk"):
         if not event.raw_text.startswith("/afk"):
             AFK_USERS[sender_id]["is_afk"] = False
-            await event.reply("Welcome back! Removed AFK status.")
+            await event.reply("Welcome back!")
 
     # Notify when replying or mentioning an AFK user
     if event.is_reply:
@@ -71,7 +71,7 @@ async def check_afk(event):
             afk_data = AFK_USERS.get(replied_user, {})
             if afk_data.get("is_afk"):
                 reason = afk_data.get("reason", "AFK")
-                await event.reply(f"This user is AFK: {reason}")
+                await event.reply(f"user is AFK: {reason}")
 
     elif event.message.mentioned:
         for entity in event.message.entities or []:
