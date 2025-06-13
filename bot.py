@@ -51,7 +51,7 @@ async def set_afk(event):
         "since": datetime.now(),
         "is_afk": True
     }
-    await event.reply(f"You are now AFK: {reason}")
+    await event.reply(f"First Name: {replied_user.first_name}You are now AFK: {reason}")
 
 @bot.on(events.NewMessage(incoming=True))
 async def check_afk(event):
