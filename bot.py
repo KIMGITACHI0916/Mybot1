@@ -45,7 +45,7 @@ async def start_cmd(event):
 @bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
 async def set_afk(event):
     user_id = event.sender_id
-    reason = event.pattern_match.group(1) or "AFK"
+    reason = event.pattern_match.group(1) or ""
     AFK_USERS[user_id] = {
         "reason": reason,
         "since": datetime.now(),
