@@ -3,10 +3,10 @@ import asyncio
 import time
 from datetime import datetime
 from collections import defaultdict
-from telethon import TelegramClient, events, functions, types
-from telethon import errors
+from telethon import TelegramClient, events, functions, types, errors
+
 # === Load environment variables ===
-api_id = os.getenv("API_ID")
+api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
 
@@ -14,18 +14,12 @@ if not all([api_id, api_hash, bot_token]):
     print("[ERROR] Missing API_ID, API_HASH, or BOT_TOKEN environment variable.")
     exit(1)
 
-api_id = int(api_id)
-
-# === Start Telegram Bot ===
-bot = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
+bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)
 
 # === In-Memory Storage ===
 flood_tracker = defaultdict(list)
-temp_bans = {}
-temp_mutes = {}
-tagall_running = {}
-antiflood_enabled = {}
-flood_punishment = {}
+antiflood_enabled = defaultdict(bool)
+flood_punishment = defaultdict(lambda: "tmute")
 AFK_USERS = defaultdict(dict)
 
 # === Utility: Check Admin ===
@@ -44,223 +38,142 @@ def admin_only(func):
         return await func(event)
     return wrapper
 
-# === /start ===
-@bot.on(events.NewMessage(pattern=r"/start"))
-async def start_cmd(event):
-    await event.reply("Bot is online!")
-
-# === /afk ===
-@bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
-async def set_afk(event):
-    user_id = event.sender_id
-    reason = event.pattern_match.group(1) or ""
-    AFK_USERS[user_id] = {
-        "reason": reason,
-        "since": datetime.now(),
-        "is_afk": True
-    }
-    sender = await event.get_sender()
-    name = sender.first_name or "User"
-    await event.reply(f"{name} is now AFK: {reason}")
-
-@bot.on(events.NewMessage(incoming=True))
-async def check_afk(event):
-    sender_id = event.sender_id
-    if sender_id in AFK_USERS and AFK_USERS[sender_id].get("is_afk"):
-        if not event.raw_text.strip().lower().startswith("/afk"):
-            AFK_USERS[sender_id]["is_afk"] = False
-            sender = await event.get_sender()
-            name = sender.first_name or "User"
-            await event.reply(f"Welcome back, {name}!")
-
-    if event.is_reply:
-        replied_msg = await event.get_reply_message()
-        if replied_msg:
-            replied_user = replied_msg.sender_id
-            afk_data = AFK_USERS.get(replied_user, {})
-            if afk_data.get("is_afk"):
-                user = await replied_msg.get_sender()
-                name = user.first_name or "User"
-                reason = afk_data.get("reason", "AFK")
-                await event.reply(f"{name} is AFK: {reason}")
-
-    elif event.message.mentioned:
-        for entity in event.message.entities or []:
-            if hasattr(entity, 'user_id'):
-                uid = entity.user_id
-                afk_data = AFK_USERS.get(uid, {})
-                if afk_data.get("is_afk"):
-                    user = await bot.get_entity(uid)
-                    name = user.first_name or "User"
-                    reason = afk_data.get("reason", "AFK")
-                    await event.reply(f"{name} is AFK: {reason}")
-
-# === Moderation: ban, mute, kick, unban, unmute ===
-async def ban_user(event, user_id, rights):
-    await bot(functions.channels.EditBannedRequest(event.chat_id, user_id, rights))
-
-@bot.on(events.NewMessage(pattern=r"/(ban|mute|kick|unban|unmute)"))
+# === /antiflood on/off ===
+@bot.on(events.NewMessage(pattern=r"/antiflood (on|off)"))
 @admin_only
-async def mod_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user to execute command.")
+async def toggle_antiflood(event):
+    state = event.pattern_match.group(1)
+    antiflood_enabled[event.chat_id] = (state == "on")
+    await event.reply(f"Antiflood has been turned {state}.")
 
-    cmd = event.pattern_match.group(1)
-    user = await event.get_reply_message().get_sender()
-    uid = user.id
-
-    if cmd == "ban":
-        rights = types.ChatBannedRights(view_messages=True)
-    elif cmd == "mute":
-        rights = types.ChatBannedRights(send_messages=True)
-    elif cmd == "kick":
-        rights = types.ChatBannedRights(view_messages=True)
-        await ban_user(event, uid, rights)
-        await asyncio.sleep(1)
-        rights = types.ChatBannedRights()
-    elif cmd in ["unban", "unmute"]:
-        rights = types.ChatBannedRights()
-    else:
-        return
-
-    await ban_user(event, uid, rights)
-    await event.reply(f"User {cmd}ed.")
-
-# === /tban and /tmute ===
-@bot.on(events.NewMessage(pattern=r"/(tban|tmute) (\d+)([smhd])"))
+# === /setflood (mute|ban|tmute) ===
+@bot.on(events.NewMessage(pattern=r"/setflood (mute|ban|tmute)"))
 @admin_only
-async def temp_mod_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a user to use temporary moderation.")
+async def set_flood_punishment(event):
+    method = event.pattern_match.group(1)
+    flood_punishment[event.chat_id] = method
+    await event.reply(f"Flood punishment set to {method}.")
 
-    cmd = event.pattern_match.group(1)
-    time_val = int(event.pattern_match.group(2))
-    unit = event.pattern_match.group(3)
-    units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-    seconds = time_val * units[unit]
-    user_msg = await event.get_reply_message()
-    user = await user_msg.get_sender()
-
-    if cmd == "tban":
-        rights = types.ChatBannedRights(until_date=int(time.time()) + seconds, view_messages=True)
-    else:
-        rights = types.ChatBannedRights(until_date=int(time.time()) + seconds, send_messages=True)
-
-    await ban_user(event, user.id, rights)
-
-    # Delete all messages from user in last 100 messages
-    async for msg in bot.iter_messages(event.chat_id, limit=100):
-        if msg.sender_id == user.id:
-            try:
-                await bot.delete_messages(event.chat_id, msg.id)
-            except:
-                pass
-
-    await event.reply(f"User {cmd}d for {time_val}{unit} and messages deleted.")
-
-# === Anti-flood ===
+# === Anti-flood Logic ===
 @bot.on(events.NewMessage(incoming=True))
 async def flood_control(event):
     if event.is_private or not antiflood_enabled.get(event.chat_id):
         return
 
     user_id = event.sender_id
+    chat_id = event.chat_id
     now = time.time()
-    chat_user_key = (event.chat_id, user_id)
-    history = flood_tracker[chat_user_key]
+    history = flood_tracker[(chat_id, user_id)]
     history = [t for t in history if now - t < 10]
     history.append(now)
-    flood_tracker[chat_user_key] = history
+    flood_tracker[(chat_id, user_id)] = history
 
     if len(history) > 5:
-        # Apply 5-min mute and delete messages
-        until = int(time.time()) + 300  # 5 minutes
-        rights = types.ChatBannedRights(until_date=until, send_messages=True)
         try:
-            await bot(functions.channels.EditBannedRequest(event.chat_id, user_id, rights))
+            action = flood_punishment[chat_id]
+            rights = None
+            reason = ""
 
-            # Delete last 100 messages from user
-            async for msg in bot.iter_messages(event.chat_id, from_user=user_id, limit=100):
+            if action == "mute":
+                rights = types.ChatBannedRights(until_date=None, send_messages=True)
+                reason = "muted"
+            elif action == "ban":
+                rights = types.ChatBannedRights(until_date=None, view_messages=True)
+                reason = "banned"
+            elif action == "tmute":
+                until = int(time.time()) + 300
+                rights = types.ChatBannedRights(until_date=until, send_messages=True)
+                reason = "temporarily muted (5 mins)"
+
+            if rights:
+                await bot(functions.channels.EditBannedRequest(chat_id, user_id, rights))
+
+            # Delete all recent messages
+            deleted_count = 0
+            async for msg in bot.iter_messages(chat_id, from_user=user_id, limit=100):
                 try:
                     await msg.delete()
+                    deleted_count += 1
                 except:
                     continue
 
-            await event.respond(f"User [Muted](tg://user?id={user_id}) for 5 minutes due to flooding.", parse_mode='md')
-            flood_tracker[chat_user_key] = []
+            await event.respond(
+                f"User [ID {user_id}](tg://user?id={user_id}) has been {reason} for flooding.\nDeleted {deleted_count} messages.",
+                parse_mode="md"
+            )
+            flood_tracker[(chat_id, user_id)] = []
+
         except errors.ChatAdminRequiredError:
             await event.respond("I don't have rights to mute or delete messages. Please make me admin with ban rights.")
-            
-# === /info ===
-@bot.on(events.NewMessage(pattern=r"/info"))
-async def info_cmd(event):
-    replied_user = (await event.get_reply_message()).sender if event.is_reply else event.sender
-    user_link = f"tg://user?id={replied_user.id}"
-    msg = (
-        f"<b>User info:</b>\n"
-        f"<b>ID:</b> <code>{replied_user.id}</code>\n"
-        f"<b>First Name:</b> {replied_user.first_name}\n"
-        f"<b>Username:</b> @{replied_user.username if replied_user.username else 'N/A'}\n"
-        f"<b>User link:</b> <a href=\"{user_link}\">link</a>"
-    )
-    await event.reply(msg, parse_mode='html')
+        except Exception as e:
+            await event.respond(f"Error during antiflood action: {str(e)}")
 
-# === /purge ===
-@bot.on(events.NewMessage(pattern=r"/purge"))
-@admin_only
-async def purge_cmd(event):
-    if not event.is_reply:
-        return await event.reply("Reply to a message to start purging from there.")
-    start_msg = await event.get_reply_message()
-    end_msg_id = event.id
-    for msg_id in range(start_msg.id, end_msg_id):
-        try:
-            await bot.delete_messages(event.chat_id, msg_id)
-        except:
-            continue
-    await event.reply("Messages purged.")
-
-# === /pin ===
-@bot.on(events.NewMessage(pattern=r"/pin"))
-@admin_only
-async def pin_cmd(event):
-    if event.is_reply:
-        await bot.pin_message(event.chat_id, event.reply_to_msg_id)
-        await event.reply("Message pinned.")
-
-# === /unpin ===
-@bot.on(events.NewMessage(pattern=r"/unpin"))
-@admin_only
-async def unpin_cmd(event):
-    await bot.unpin_message(event.chat_id)
-    await event.reply("Message unpinned.")
-
-# === /cancel ===
-@bot.on(events.NewMessage(pattern=r"/cancel"))
-@admin_only
-async def cancel_cmd(event):
-    tagall_running[event.chat_id] = False
-    await event.reply("Tagging cancelled.")
-
-# === /all ===
+# === /all tag all members ===
 @bot.on(events.NewMessage(pattern=r"/all"))
 @admin_only
-async def tag_all_cmd(event):
-    if not (await bot.get_permissions(event.chat_id, 'me')).is_admin:
-        return await event.reply("I don't have permission to tag everyone.")
-    tagall_running[event.chat_id] = True
+async def tag_all(event):
+    mentions = []
     async for user in bot.iter_participants(event.chat_id):
-        if not tagall_running.get(event.chat_id):
-            break
-        if user.bot or user.deleted:
-            continue
+        mentions.append(f"[{user.first_name}](tg://user?id={user.id})")
+    batch = []
+    while mentions:
+        batch = mentions[:5]
+        mentions = mentions[5:]
+        await bot.send_message(event.chat_id, " ".join(batch), parse_mode="md")
+
+# === /cancel clear tag ===
+@bot.on(events.NewMessage(pattern=r"/cancel"))
+@admin_only
+async def cancel(event):
+    await event.respond("Command canceled.")
+
+# === /info command ===
+@bot.on(events.NewMessage(pattern=r"/info"))
+async def info(event):
+    user = await event.get_sender()
+    info_text = (
+        f"**User Info:**\n"
+        f"ID: `{user.id}`\n"
+        f"Name: `{user.first_name}`\n"
+        f"Username: @{user.username if user.username else 'None'}\n"
+        f"Link: [Click Here](tg://user?id={user.id})"
+    )
+    await event.reply(info_text, parse_mode="md")
+
+# === /purge command ===
+@bot.on(events.NewMessage(pattern=r"/purge"))
+async def purge(event):
+    if not await is_admin(event):
+        return
+    reply = await event.get_reply_message()
+    if not reply:
+        return await event.reply("Reply to a message to start purging.")
+    count = 0
+    async for msg in bot.iter_messages(event.chat_id, min_id=reply.id):
         try:
-            await event.respond(f"[{user.first_name}](tg://user?id={user.id})", link_preview=False)
-            await asyncio.sleep(1)
+            await msg.delete()
+            count += 1
         except:
             continue
-    await event.reply("Tagging finished.")
+    await event.reply(f"Purged {count} messages.")
 
-print("Bot started")
+# === /pin and /unpin ===
+@bot.on(events.NewMessage(pattern=r"/(pin|unpin)"))
+@admin_only
+async def pin_unpin(event):
+    command = event.pattern_match.group(1)
+    reply = await event.get_reply_message()
+    if not reply:
+        return await event.reply("Reply to a message to pin/unpin.")
+    try:
+        if command == "pin":
+            await bot.pin_message(event.chat_id, reply.id)
+            await event.reply("Message pinned.")
+        else:
+            await bot.unpin_message(event.chat_id, reply.id)
+            await event.reply("Message unpinned.")
+    except Exception as e:
+        await event.reply(f"Failed to {command} message: {str(e)}")
+
+print("Bot is running...")
 bot.run_until_disconnected()
-    
