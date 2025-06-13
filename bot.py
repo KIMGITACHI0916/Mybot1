@@ -39,36 +39,40 @@ async def start_cmd(event):
     await event.reply("Bot is online!")
 
 # === /afk ===
+# === /afk ===
 @bot.on(events.NewMessage(pattern=r"/afk(?:\s+(.*))?"))
 async def afk_cmd(event):
     reason = event.pattern_match.group(1) or "AFK"
     afks[event.sender_id] = (time.time(), reason)
     await event.reply(f"You are now AFK: {reason}")
 
+# === AFK Mention Checker & Return Detector ===
 @bot.on(events.NewMessage())
-async def mention_afk_checker(event):
+async def handle_afk(event):
     if event.is_private:
         return
-    for entity in event.message.entities or []:
-        if isinstance(entity, types.MessageEntityMention) or isinstance(entity, types.MessageEntityMentionName):
+
+    # Remove AFK if the sender was AFK
+    if event.sender_id in afks:
+        del afks[event.sender_id]
+        await event.reply("Welcome back! Removed AFK status.")
+
+    # Check if mentioned users are AFK
+    if event.message.entities:
+        for entity in event.message.entities:
             user_id = None
             if isinstance(entity, types.MessageEntityMentionName):
                 user_id = entity.user_id
             elif isinstance(entity, types.MessageEntityMention):
-                username = event.raw_text[entity.offset:entity.offset + entity.length]
-                if username.startswith("@"): username = username[1:]
+                username = event.raw_text[entity.offset:entity.offset + entity.length].lstrip("@")
                 try:
                     user = await bot.get_entity(username)
                     user_id = user.id
                 except:
                     continue
             if user_id and user_id in afks:
-                reason = afks[user_id][1]
+                _, reason = afks[user_id]
                 await event.reply(f"The user is AFK: {reason}")
-
-    if event.sender_id in afks:
-        del afks[event.sender_id]
-        await event.reply("Welcome back! Removed AFK status.")
 
 # === /ban ===
 @bot.on(events.NewMessage(pattern=r"/ban"))
