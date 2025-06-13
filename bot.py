@@ -168,22 +168,29 @@ async def kick_cmd(event):
     await event.reply("User kicked.")
 
 # === /tmute ===
-@bot.on(events.NewMessage(pattern=r"/tmute (\d+)([smhd])"))
+@bot.on(events.NewMessage(pattern=r"/tban (\d+)([smhd])"))
 @admin_only
-async def tmute_cmd(event):
+async def tban_cmd(event):
     if not event.is_reply:
-        return await event.reply("Reply to a user to temporarily mute.")
+        return await event.reply("Reply to a user's message to ban them.")
+
     time_val = int(event.pattern_match.group(1))
     unit = event.pattern_match.group(2)
     units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
     seconds = time_val * units[unit]
-    user = await event.get_reply_message().get_sender()
+
+    user = await event.get_reply_message()
+    until_time = int(time.time()) + seconds
+
     await bot(functions.channels.EditBannedRequest(
         event.chat_id,
-        user.id,
-        types.ChatBannedRights(until_date=int(time.time()) + seconds, send_messages=True)
+        user.sender_id,
+        types.ChatBannedRights(
+            until_date=until_time,
+            view_messages=True
+        )
     ))
-    await event.reply(f"User muted for {time_val}{unit}.")
+    await event.reply(f"User banned for {time_val}{unit}.")
 
 # === /tban ===
 @bot.on(events.NewMessage(pattern=r"/tban (\d+)([smhd])"))
