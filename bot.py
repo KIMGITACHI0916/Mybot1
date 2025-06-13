@@ -236,7 +236,7 @@ async def info_cmd(event):
         f"ID: [{replied_user.id}]({user_link})\n"
         f"First Name: {replied_user.first_name}\n"
         f"Username: @{replied_user.username if replied_user.username else 'N/A'}\n"
-        f"User link: {replied_link.user_link}"
+        f"User link: {user_link}"
     )
     await event.reply(msg, parse_mode='md')
 
