@@ -245,21 +245,24 @@ async def flood_control(event):
 # === /info ===
 @bot.on(events.NewMessage(pattern=r"/info"))
 async def info_cmd(event):
+@bot.on(events.NewMessage(pattern=r"/info"))
+async def info_cmd(event):
     if event.is_reply:
         replied_user = (await event.get_reply_message()).sender
     else:
         replied_user = event.sender
 
     user_link = f"tg://user?id={replied_user.id}"
-
+    
     msg = (
-        f"User info:\n"
-        f"ID: [{replied_user.id}]({user_link})\n"
-        f"First Name: {replied_user.first_name}\n"
-        f"Username: @{replied_user.username if replied_user.username else 'N/A'}\n"
-        f"User link: {user_link}"
+        f"<b>User info:</b>\n"
+        f"<b>ID:</b> <code>{replied_user.id}</code>\n"
+        f"<b>First Name:</b> {replied_user.first_name}\n"
+        f"<b>Username:</b> @{replied_user.username if replied_user.username else 'N/A'}\n"
+        f"<b>User link:</b> <a href=\"{user_link}\">link</a>"
     )
-    await event.reply(msg, parse_mode='md')
+    
+    await event.reply(msg, parse_mode='html')
 
 # === /purge ===
 @bot.on(events.NewMessage(pattern=r"/purge"))
