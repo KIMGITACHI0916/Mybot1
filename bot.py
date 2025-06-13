@@ -232,6 +232,7 @@ async def remove_afk(event):
         name = AFK_USERS[user_id]["name"]
         del AFK_USERS[user_id]
         await event.reply(f"Welcome back! {name}")
+
                     
 print("Bot is running...")
 bot.run_until_disconnected()
