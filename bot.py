@@ -170,10 +170,9 @@ async def pin_unpin(event):
             await event.reply("Message unpinned.")
     except Exception as e:
         await event.reply(f"Failed to {command} message: {str(e)}")
-
-# === /afk [reason] ===
+# afk
 @bot.on(events.NewMessage(pattern=r"/afk( .+)?"))
-async def set_afk(event):
+async def afk_command(event):
     reason = event.pattern_match.group(1)
     user = await event.get_sender()
     name = user.first_name
@@ -187,24 +186,22 @@ async def set_afk(event):
         msg += f": {reason.strip()}"
     await event.reply(msg)
 
-# === Detect Tagging AFK Users ===
+@bot.on(events.NewMessage(incoming=True))
+async def remove_afk_status(event):
+    user_id = event.sender_id
+    text = event.raw_text
+    if user_id in AFK_USERS and not text.startswith("/afk"):
+        name = AFK_USERS[user_id]["name"]
+        del AFK_USERS[user_id]
+        await event.reply(f"Welcome back! {name}")
+
 @bot.on(events.NewMessage())
-async def check_afk(event):
+async def tag_afk_check(event):
     if not event.is_private and event.mentioned:
         for ent in event.message.entities or []:
-            if isinstance(ent, (types.MessageEntityMention, types.MessageEntityMentionName)):
-                tagged_id = None
-                if isinstance(ent, types.MessageEntityMentionName):
-                    tagged_id = ent.user_id
-                elif ent.offset == 0 and event.message.message.startswith("@"):
-                    username = event.message.message.split()[0][1:]
-                    try:
-                        entity = await bot.get_entity(username)
-                        tagged_id = entity.id
-                    except:
-                        pass
-
-                if tagged_id and tagged_id in AFK_USERS:
+            if isinstance(ent, types.MessageEntityMentionName):
+                tagged_id = ent.user_id
+                if tagged_id in AFK_USERS:
                     afk_data = AFK_USERS[tagged_id]
                     since = time.time() - afk_data["time"]
                     days = int(since // 86400)
@@ -214,7 +211,6 @@ async def check_afk(event):
                     if days: duration.append(f"{days}d")
                     if hours: duration.append(f"{hours}h")
                     if minutes or not duration: duration.append(f"{minutes}m")
-
                     reason = afk_data.get("reason")
                     name = afk_data.get("name")
                     reply = f"{name} is AFK"
@@ -222,18 +218,7 @@ async def check_afk(event):
                         reply += f": {reason}"
                     reply += f"\nAFK for {' '.join(duration)}"
                     await event.reply(reply)
-
-# === Clear AFK on any message except /afk ===
-@bot.on(events.NewMessage(incoming=True))
-async def remove_afk(event):
-    if not event.is_private and event.raw_text.strip().startswith("/afk"):
-        return  # skip clearing AFK if it's the /afk command itself
-
-    user_id = event.sender_id
-    if user_id in AFK_USERS:
-        name = AFK_USERS[user_id]["name"]
-        del AFK_USERS[user_id]
-        await event.reply(f"Welcome back! {name}")
+                break
 
                     
 print("Bot is running...")
