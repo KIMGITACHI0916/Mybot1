@@ -198,30 +198,34 @@ async def remove_afk_status(event):
 @bot.on(events.NewMessage())
 async def tag_afk_check(event):
     if not event.is_private and event.mentioned:
+        mentioned_ids = []
         for ent in event.message.entities or []:
             if isinstance(ent, types.MessageEntityMentionName):
-                tagged_id = ent.user_id
-                if tagged_id in AFK_USERS:
-                    afk_data = AFK_USERS[tagged_id]
-                    since = time.time() - afk_data["time"]
-                    days = int(since // 86400)
-                    hours = int((since % 86400) // 3600)
-                    minutes = int((since % 3600) // 60)
-                    seconds = int(since % 60)
-                    duration = []
-                    if days: duration.append(f"{days}d")
-                    if hours: duration.append(f"{hours}h")
-                    if minutes: duration.append(f"{minutes}m")
-                    if seconds or not duration: duration.append(f"{seconds}s")
+                mentioned_ids.append(ent.user_id)
 
-                    reason = afk_data.get("reason")
-                    name = afk_data.get("name")
-                    reply = f"{name} is AFK"
-                    if reason:
-                        reply += f": {reason}"
-                    reply += f"\nAFK for {' '.join(duration)}"
-                    await event.reply(reply)
+        for uid in mentioned_ids:
+            if uid in AFK_USERS:
+                afk_data = AFK_USERS[uid]
+                since = time.time() - afk_data["time"]
+                days = int(since // 86400)
+                hours = int((since % 86400) // 3600)
+                minutes = int((since % 3600) // 60)
+                seconds = int(since % 60)
+                duration = []
+                if days: duration.append(f"{days}d")
+                if hours: duration.append(f"{hours}h")
+                if minutes: duration.append(f"{minutes}m")
+                if seconds or not duration: duration.append(f"{seconds}s")
+
+                reason = afk_data.get("reason")
+                name = afk_data.get("name")
+                reply = f"{name} is AFK"
+                if reason:
+                    reply += f": {reason}"
+                reply += f"\nAFK for {' '.join(duration)}"
+                await event.reply(reply)
                 break
+                
 
                     
 print("Bot is running...")
