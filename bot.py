@@ -171,34 +171,46 @@ async def pin_unpin(event):
     except Exception as e:
         await event.reply(f"Failed to {command} message: {str(e)}")
 # afk
-@bot.on(events.NewMessage(pattern=r"/afk( .+)?"))
+@bot.on(events.NewMessage(pattern=r"/afk(?: (.+))?"))
 async def afk_command(event):
     reason = event.pattern_match.group(1)
     user = await event.get_sender()
     name = user.first_name
-    last_msg_time = time.time()
+    current_time = time.time()
     AFK_USERS[user.id] = {
-        "time": last_msg_time,
+        "since": current_time,
         "reason": reason.strip() if reason else None,
         "name": name,
-        "last_msg": None,
     }
-    msg = f"{name} is AFK"
+    msg = f"{name} ɪs ɴᴏᴡ ᴀғᴋ!"
     if reason:
-        msg += f": {reason.strip()}"
+        msg = f"{name} ɪs ɴᴏᴡ ᴀғᴋ: {reason.strip()}"
     await event.reply(msg)
 
-@bot.on(events.NewMessage(incoming=True))
+@bot.on(events.NewMessage(outgoing=True))
 async def remove_afk_status(event):
     user_id = event.sender_id
-    text = event.raw_text
-    if user_id in AFK_USERS and not text.startswith("/afk"):
+    if user_id in AFK_USERS:
         name = AFK_USERS[user_id]["name"]
+        since = AFK_USERS[user_id]["since"]
         del AFK_USERS[user_id]
-        await event.reply(f"Welcome back! {name}")
+
+        afk_duration = time.time() - since
+        seconds = int(afk_duration % 60)
+        minutes = int((afk_duration // 60) % 60)
+        hours = int((afk_duration // 3600) % 24)
+        days = int(afk_duration // 86400)
+        duration_parts = []
+        if days: duration_parts.append(f"{days}d")
+        if hours: duration_parts.append(f"{hours}h")
+        if minutes: duration_parts.append(f"{minutes}m")
+        if seconds or not duration_parts: duration_parts.append(f"{seconds}s")
+        duration_str = ' '.join(duration_parts)
+
+        await event.reply(f"{name} ɪs ʙᴀᴄᴋ ᴏɴʟɪɴᴇ ᴀɴᴅ ᴡᴀs ᴀᴡᴀʏ ғᴏʀ {duration_str}")
 
 @bot.on(events.NewMessage())
-async def tag_afk_check(event):
+async def check_mentions(event):
     if not event.is_private and event.mentioned:
         mentioned_ids = []
         for ent in event.message.entities or []:
@@ -208,34 +220,29 @@ async def tag_afk_check(event):
         for uid in mentioned_ids:
             if uid in AFK_USERS:
                 afk_data = AFK_USERS[uid]
-                since = time.time() - afk_data["time"]
-                days = int(since // 86400)
-                hours = int((since % 86400) // 3600)
-                minutes = int((since % 3600) // 60)
+                since = time.time() - afk_data["since"]
                 seconds = int(since % 60)
-                duration = []
-                if days: duration.append(f"{days}d")
-                if hours: duration.append(f"{hours}h")
-                if minutes: duration.append(f"{minutes}m")
-                if seconds or not duration: duration.append(f"{seconds}s")
+                minutes = int((since // 60) % 60)
+                hours = int((since // 3600) % 24)
+                days = int(since // 86400)
+                duration_parts = []
+                if days: duration_parts.append(f"{days}d")
+                if hours: duration_parts.append(f"{hours}h")
+                if minutes: duration_parts.append(f"{minutes}m")
+                if seconds or not duration_parts: duration_parts.append(f"{seconds}s")
+                duration_str = ' '.join(duration_parts)
 
                 reason = afk_data.get("reason")
                 name = afk_data.get("name")
-                reply = f"{name} is AFK"
+
+                reply = f"{name} ɪs ᴀғᴋ"
                 if reason:
                     reply += f": {reason}"
-                reply += f"\nAFK for {' '.join(duration)}"
+                reply += f"\nᴜsᴇʀ ɪs ᴀғᴋ ғᴏʀ {duration_str}"
+
                 await event.reply(reply)
                 break
-
-@bot.on(events.NewMessage(outgoing=True))
-async def update_last_message(event):
-    user_id = event.sender_id
-    if user_id in AFK_USERS:
-        AFK_USERS[user_id]["last_msg"] = event.raw_text
-
                 
-
                     
 print("Bot is running...")
 bot.run_until_disconnected()
