@@ -174,7 +174,7 @@ async def pin_unpin(event):
 # === /afk ===
 @bot.on(events.NewMessage(pattern=r"/afk(?: (.+))?"))
 async def afk_command(event):
-    reason = event.pattern_match.group(1) or "AFK"
+    reason = event.pattern_match.group(1) or ""
     user = await event.get_sender()
     name = user.first_name
     AFK_USERS[user.id] = {
@@ -184,17 +184,17 @@ async def afk_command(event):
     }
     await event.reply(f"{name} is now AFK: {reason.strip()}")
 
-# === Mention AFK Check ===
+# === Mention + Reply AFK Checker ===
 @bot.on(events.NewMessage())
 async def mention_afk_checker(event):
     if event.is_private:
         return
 
-    # Do not run if message is an /afk command
+    # ✅ Prevent AFK removal when setting AFK
     if event.raw_text.startswith("/afk"):
         return
 
-    # Notify if someone mentions an AFK user
+    # === (1) Check for AFK users in mentions ===
     for entity in event.message.entities or []:
         if isinstance(entity, (types.MessageEntityMention, types.MessageEntityMentionName)):
             user_id = None
@@ -220,7 +220,19 @@ async def mention_afk_checker(event):
                 await event.reply(msg)
                 break
 
-    # Remove AFK if sender is AFK
+    # === (2) Check if message is replying to an AFK user ===
+    if event.is_reply:
+        reply_msg = await event.get_reply_message()
+        if reply_msg.sender_id in AFK_USERS:
+            afk_data = AFK_USERS[reply_msg.sender_id]
+            name = afk_data.get("name")
+            reason = afk_data.get("reason")
+            since = time.time() - afk_data.get("time")
+            duration = int(since)
+            msg = f"{name} is AFK: {reason}\nAFK for {duration}s"
+            await event.reply(msg)
+
+    # === (3) Remove AFK if sender was AFK ===
     if event.sender_id in AFK_USERS:
         afk_data = AFK_USERS[event.sender_id]
         name = afk_data.get("name")
@@ -229,7 +241,6 @@ async def mention_afk_checker(event):
         del AFK_USERS[event.sender_id]
         await event.reply(f"Welcome back, {name}! You were away for {duration}s.")
 
-                    
                     
                     
 print("Bot is running...")
