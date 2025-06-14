@@ -193,11 +193,10 @@ async def check_afk(event):
     if not event.is_private and event.mentioned:
         for ent in event.message.entities or []:
             if isinstance(ent, (types.MessageEntityMention, types.MessageEntityMentionName)):
-                user = await event.get_sender()
                 tagged_id = None
                 if isinstance(ent, types.MessageEntityMentionName):
                     tagged_id = ent.user_id
-                elif ent.offset == 0 and event.message.message.startswith("@"):  # fallback
+                elif ent.offset == 0 and event.message.message.startswith("@"):
                     username = event.message.message.split()[0][1:]
                     try:
                         entity = await bot.get_entity(username)
@@ -224,9 +223,12 @@ async def check_afk(event):
                     reply += f"\nAFK for {' '.join(duration)}"
                     await event.reply(reply)
 
-# === Clear AFK on message ===
+# === Clear AFK on any message except /afk ===
 @bot.on(events.NewMessage(incoming=True))
 async def remove_afk(event):
+    if not event.is_private and event.raw_text.strip().startswith("/afk"):
+        return  # skip clearing AFK if it's the /afk command itself
+
     user_id = event.sender_id
     if user_id in AFK_USERS:
         name = AFK_USERS[user_id]["name"]
