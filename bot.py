@@ -176,10 +176,12 @@ async def afk_command(event):
     reason = event.pattern_match.group(1)
     user = await event.get_sender()
     name = user.first_name
+    last_msg_time = time.time()
     AFK_USERS[user.id] = {
-        "time": time.time(),
+        "time": last_msg_time,
         "reason": reason.strip() if reason else None,
         "name": name,
+        "last_msg": None,
     }
     msg = f"{name} is AFK"
     if reason:
@@ -225,6 +227,13 @@ async def tag_afk_check(event):
                 reply += f"\nAFK for {' '.join(duration)}"
                 await event.reply(reply)
                 break
+
+@bot.on(events.NewMessage(outgoing=True))
+async def update_last_message(event):
+    user_id = event.sender_id
+    if user_id in AFK_USERS:
+        AFK_USERS[user_id]["last_msg"] = event.raw_text
+
                 
 
                     
