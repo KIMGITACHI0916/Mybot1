@@ -207,10 +207,13 @@ async def tag_afk_check(event):
                     days = int(since // 86400)
                     hours = int((since % 86400) // 3600)
                     minutes = int((since % 3600) // 60)
+                    seconds = int(since % 60)
                     duration = []
                     if days: duration.append(f"{days}d")
                     if hours: duration.append(f"{hours}h")
-                    if minutes or not duration: duration.append(f"{minutes}m")
+                    if minutes: duration.append(f"{minutes}m")
+                    if seconds or not duration: duration.append(f"{seconds}s")
+
                     reason = afk_data.get("reason")
                     name = afk_data.get("name")
                     reply = f"{name} is AFK"
