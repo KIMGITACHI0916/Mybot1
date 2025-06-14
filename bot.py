@@ -176,73 +176,40 @@ async def afk_command(event):
     reason = event.pattern_match.group(1)
     user = await event.get_sender()
     name = user.first_name
-    current_time = time.time()
     AFK_USERS[user.id] = {
-        "since": current_time,
+        "time": time.time(),
         "reason": reason.strip() if reason else None,
         "name": name,
     }
-    msg = f"{name} ɪs ɴᴏᴡ ᴀғᴋ!"
+    msg = f"{name} is now AFK"
     if reason:
-        msg = f"{name} ɪs ɴᴏᴡ ᴀғᴋ: {reason.strip()}"
+        msg = f"{name} is now AFK: {reason.strip()}"
     await event.reply(msg)
 
 @bot.on(events.NewMessage(outgoing=True))
-async def remove_afk_status(event):
+async def remove_afk(event):
     user_id = event.sender_id
     if user_id in AFK_USERS:
         name = AFK_USERS[user_id]["name"]
-        since = AFK_USERS[user_id]["since"]
         del AFK_USERS[user_id]
-
-        afk_duration = time.time() - since
-        seconds = int(afk_duration % 60)
-        minutes = int((afk_duration // 60) % 60)
-        hours = int((afk_duration // 3600) % 24)
-        days = int(afk_duration // 86400)
-        duration_parts = []
-        if days: duration_parts.append(f"{days}d")
-        if hours: duration_parts.append(f"{hours}h")
-        if minutes: duration_parts.append(f"{minutes}m")
-        if seconds or not duration_parts: duration_parts.append(f"{seconds}s")
-        duration_str = ' '.join(duration_parts)
-
-        await event.reply(f"{name} ɪs ʙᴀᴄᴋ ᴏɴʟɪɴᴇ ᴀɴᴅ ᴡᴀs ᴀᴡᴀʏ ғᴏʀ {duration_str}")
+        await event.reply(f"Welcome back! {name}")
 
 @bot.on(events.NewMessage())
-async def check_mentions(event):
+async def detect_afk_tag(event):
     if not event.is_private and event.mentioned:
-        mentioned_ids = []
-        for ent in event.message.entities or []:
-            if isinstance(ent, types.MessageEntityMentionName):
-                mentioned_ids.append(ent.user_id)
-
-        for uid in mentioned_ids:
-            if uid in AFK_USERS:
-                afk_data = AFK_USERS[uid]
-                since = time.time() - afk_data["since"]
-                seconds = int(since % 60)
-                minutes = int((since // 60) % 60)
-                hours = int((since // 3600) % 24)
-                days = int(since // 86400)
-                duration_parts = []
-                if days: duration_parts.append(f"{days}d")
-                if hours: duration_parts.append(f"{hours}h")
-                if minutes: duration_parts.append(f"{minutes}m")
-                if seconds or not duration_parts: duration_parts.append(f"{seconds}s")
-                duration_str = ' '.join(duration_parts)
-
-                reason = afk_data.get("reason")
-                name = afk_data.get("name")
-
-                reply = f"{name} ɪs ᴀғᴋ"
-                if reason:
-                    reply += f": {reason}"
-                reply += f"\nᴜsᴇʀ ɪs ᴀғᴋ ғᴏʀ {duration_str}"
-
-                await event.reply(reply)
-                break
-                
+        for entity in event.message.entities or []:
+            if isinstance(entity, types.MessageEntityMentionName):
+                uid = entity.user_id
+                if uid in AFK_USERS:
+                    afk = AFK_USERS[uid]
+                    name = afk.get("name")
+                    reason = afk.get("reason")
+                    msg = f"{name} is AFK"
+                    if reason:
+                        msg += f": {reason}"
+                    await event.reply(msg)
+                    break
+                    
                     
 print("Bot is running...")
 bot.run_until_disconnected()
