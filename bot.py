@@ -38,6 +38,32 @@ def admin_only(func):
         return await func(event)
     return wrapper
 
+# === /help ===
+@bot.on(events.NewMessage(pattern=r"/help"))
+async def help_command(event):
+    help_text = (
+        "**🤖 Bot Help Menu**\n\n"
+        "**📌 Modules Available:**\n\n"
+        "**start** – Check if the bot is active.\n"
+        "**info** – Get user information.\n"
+        "**help** – Show this help message.\n"
+        "**all** – Mention/tag all group members.\n\n"
+        "**🛡 Admin Tools:**\n"
+        "**ban** – Ban a user from the group.\n"
+        "**unban** – Unban a previously banned user.\n"
+        "**mute** – Mute a user in the group.\n"
+        "**unmute** – Unmute a muted user.\n"
+        "**kick** – Kick a user from the group.\n"
+        "**tban** – Temporarily ban a user.\n"
+        "**tmute** – Temporarily mute a user.\n"
+        "**sban** – Silently ban (no message shown).\n"
+        "**smute** – Silently mute (no message shown).\n"
+        "**skick** – Silently kick (no message shown).\n\n"
+        "Type `/<command>` to use any module.\n"
+        "Example: `/ban @username` or `/tmute @user 10m`\n"
+    )
+    await event.reply(help_text)
+    
 # === /antiflood on/off ===
 @bot.on(events.NewMessage(pattern=r"/antiflood (on|off)"))
 @admin_only
