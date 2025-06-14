@@ -1,6 +1,7 @@
 import os
 import asyncio
 import time
+from telethon import Button
 from datetime import datetime
 from collections import defaultdict
 from telethon import TelegramClient, events, functions, types, errors
@@ -37,32 +38,64 @@ def admin_only(func):
             return await event.reply("You need to be an admin to use this command.")
         return await func(event)
     return wrapper
-
-# === /help ===
+# ==help==
 @bot.on(events.NewMessage(pattern=r"/help"))
 async def help_command(event):
-    help_text = (
-        "**🤖 Bot Help Menu**\n\n"
-        "**📌 Modules Available:**\n\n"
-        "**start** – Check if the bot is active.\n"
-        "**info** – Get user information.\n"
-        "**help** – Show this help message.\n"
-        "**🛡 Admin Tools:**\n"
-        "**all** – Mention/tag all group members.\n\n"
-        "**ban** – Ban a user from the group.\n"
-        "**unban** – Unban a previously banned user.\n"
-        "**mute** – Mute a user in the group.\n"
-        "**unmute** – Unmute a muted user.\n"
-        "**kick** – Kick a user from the group.\n"
-        "**tban** – Temporarily ban a user.\n"
-        "**tmute** – Temporarily mute a user.\n"
-        "**sban** – Silently ban (no message shown).\n"
-        "**smute** – Silently mute (no message shown).\n"
-        "**skick** – Silently kick (no message shown).\n\n"
-        "Type `/<command>` to use any module.\n"
-        "Example: `/ban @username` or `/tmute @user 10m`\n"
+    help_text = "**🤖 Bot Help Menu**\n\nSelect a category below to see available commands."
+
+    buttons = [
+        [Button.inline("📌 Basic Commands", data=b"help_basic")],
+        [Button.inline("🛡 Admin Tools", data=b"help_admin")],
+        [Button.inline("👤 User Tools", data=b"help_user")],
+    ]
+
+    await event.respond(help_text, buttons=buttons)
+
+
+@bot.on(events.CallbackQuery(data=b"help_basic"))
+async def show_basic(event):
+    await event.edit(
+        "**📌 Basic Commands**\n\n"
+        "**/start** – Check if the bot is active.\n"
+        "**/info** – Get user information.\n"
+        "**/help** – Show this help message.\n"
+        "**/all** – Mention/tag all group members.\n",
+        buttons=[Button.inline("⬅️ Back", data=b"help_back")]
     )
-    await event.reply(help_text)
+
+@bot.on(events.CallbackQuery(data=b"help_admin"))
+async def show_admin(event):
+    await event.edit(
+        "**🛡 Admin Tools**\n\n"
+        "**/ban** – Ban a user from the group.\n"
+        "**/unban** – Unban a previously banned user.\n"
+        "**/mute** – Mute a user in the group.\n"
+        "**/unmute** – Unmute a muted user.\n"
+        "**/kick** – Kick a user from the group.\n"
+        "**/tban** – Temporarily ban a user.\n"
+        "**/tmute** – Temporarily mute a user.\n"
+        "**/sban** – Silently ban (no message shown).\n"
+        "**/smute** – Silently mute (no message shown).\n"
+        "**/skick** – Silently kick (no message shown).\n",
+        buttons=[Button.inline("⬅️ Back", data=b"help_back")]
+    )
+
+@bot.on(events.CallbackQuery(data=b"help_user"))
+async def show_user(event):
+    await event.edit(
+        "**👤 User Tools**\n\n"
+        "**/afk** – Set AFK status with optional reason.\n"
+        "**/cancel** – Cancel ongoing tagall.\n"
+        "**/purge** – Delete messages in bulk.\n"
+        "**/pin** – Pin a message.\n"
+        "**/unpin** – Unpin a message.\n",
+        buttons=[Button.inline("⬅️ Back", data=b"help_back")]
+    )
+
+@bot.on(events.CallbackQuery(data=b"help_back"))
+async def show_main_help(event):
+    await help_command(event)
+
     
 # === /antiflood on/off ===
 @bot.on(events.NewMessage(pattern=r"/antiflood (on|off)"))
