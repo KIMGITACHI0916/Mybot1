@@ -199,19 +199,17 @@ async def info(event):
 @bot.on(events.NewMessage(pattern=r"/purge"))
 async def purge(event):
     if not await is_admin(event):
-        return await event.reply("You need to be an admin to use this command.")
+        return await event.reply("❗ You need to be an admin to use this command.")
 
     reply = await event.get_reply_message()
     if not reply:
-        return await event.reply("❗ Reply to a message to start purging from.")
+        return await event.reply("❗ Reply to a message to start purging.")
 
-    chat_id = event.chat_id
-    start_id = reply.id
-    end_id = event.id
     deleted = 0
-
     try:
-        async for msg in bot.iter_messages(chat_id, min_id=start_id, max_id=end_id):
+        async for msg in bot.iter_messages(event.chat_id, offset_id=event.id):
+            if msg.id <= reply.id:
+                break
             try:
                 await msg.delete()
                 deleted += 1
@@ -219,29 +217,26 @@ async def purge(event):
                 continue
         await reply.delete()
         await event.delete()
-
-        confirm = await bot.send_message(chat_id, f"✅ Purged {deleted + 2} messages.")
+        confirm = await bot.send_message(event.chat_id, f"✅ Purged {deleted + 2} messages.")
         await asyncio.sleep(3)
         await confirm.delete()
     except Exception as e:
-        await event.reply(f"⚠️ Error while purging: {e}")
+        await event.reply(f"⚠️ Error during purge: {e}")
 
 # === /spurge (silent purge) ===
 @bot.on(events.NewMessage(pattern=r"/spurge"))
-async def silent_purge(event):
+async def spurge(event):
     if not await is_admin(event):
         return
 
     reply = await event.get_reply_message()
     if not reply:
-        return await event.reply("❗ Reply to a message to start purging from.")
-
-    chat_id = event.chat_id
-    start_id = reply.id
-    end_id = event.id
+        return await event.reply("❗ Reply to a message to start purging.")
 
     try:
-        async for msg in bot.iter_messages(chat_id, min_id=start_id, max_id=end_id):
+        async for msg in bot.iter_messages(event.chat_id, offset_id=event.id):
+            if msg.id <= reply.id:
+                break
             try:
                 await msg.delete()
             except:
