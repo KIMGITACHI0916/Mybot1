@@ -195,22 +195,61 @@ async def info(event):
     )
     await event.reply(info_text, parse_mode="md")
 
-# === /purge command ===
+# === /purge ===
 @bot.on(events.NewMessage(pattern=r"/purge"))
 async def purge(event):
     if not await is_admin(event):
-        return
+        return await event.reply("You need to be an admin to use this command.")
+
     reply = await event.get_reply_message()
     if not reply:
-        return await event.reply("Reply to a message to start purging.")
-    count = 0
-    async for msg in bot.iter_messages(event.chat_id, min_id=reply.id):
-        try:
-            await msg.delete()
-            count += 1
-        except:
-            continue
-    await event.reply(f"Purged {count} messages.")
+        return await event.reply("❗ Reply to a message to start purging from.")
+
+    chat_id = event.chat_id
+    start_id = reply.id
+    end_id = event.id
+    deleted = 0
+
+    try:
+        async for msg in bot.iter_messages(chat_id, min_id=start_id, max_id=end_id):
+            try:
+                await msg.delete()
+                deleted += 1
+            except:
+                continue
+        await reply.delete()
+        await event.delete()
+
+        confirm = await bot.send_message(chat_id, f"✅ Purged {deleted + 2} messages.")
+        await asyncio.sleep(3)
+        await confirm.delete()
+    except Exception as e:
+        await event.reply(f"⚠️ Error while purging: {e}")
+
+# === /spurge (silent purge) ===
+@bot.on(events.NewMessage(pattern=r"/spurge"))
+async def silent_purge(event):
+    if not await is_admin(event):
+        return
+
+    reply = await event.get_reply_message()
+    if not reply:
+        return await event.reply("❗ Reply to a message to start purging from.")
+
+    chat_id = event.chat_id
+    start_id = reply.id
+    end_id = event.id
+
+    try:
+        async for msg in bot.iter_messages(chat_id, min_id=start_id, max_id=end_id):
+            try:
+                await msg.delete()
+            except:
+                continue
+        await reply.delete()
+        await event.delete()
+    except:
+        pass
 
 # === /pin and /unpin ===
 @bot.on(events.NewMessage(pattern=r"/(pin|unpin)"))
