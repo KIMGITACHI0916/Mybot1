@@ -1,15 +1,24 @@
 import os
 import asyncio
 import time
+import logging
 from telethon import Button
 from datetime import datetime
 from collections import defaultdict
 from telethon import TelegramClient, events, functions, types, errors
+from telethon.tl.types import PeerChannel, PeerChat
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # === Load environment variables ===
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
+
+# Telethon client setup
+bot = TelegramClient('bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 if not all([api_id, api_hash, bot_token]):
     print("[ERROR] Missing API_ID, API_HASH, or BOT_TOKEN environment variable.")
@@ -23,6 +32,9 @@ antiflood_enabled = defaultdict(bool)
 flood_punishment = defaultdict(lambda: "tmute")
 AFK_USERS = defaultdict(dict)
 OWNER_ID = int(os.getenv("OWNER_ID"))
+started_users = set()
+bot_groups = set()
+
 # === Utility: Check Admin ===
 async def is_admin(event):
     try:
@@ -38,7 +50,8 @@ def admin_only(func):
             return await event.reply("You need to be an admin to use this command.")
         return await func(event)
     return wrapper
-    
+
+
 # ==help==
 @bot.on(events.NewMessage(pattern=r"/help"))
 async def help_command(event):
@@ -163,179 +176,6 @@ async def flood_control(event):
             await event.respond("Flood control failed: Method not allowed for bots. Please ensure the bot has full rights.")
         except Exception as e:
             await event.respond(f"Error during antiflood action: {str(e)}")
-
-# === /all tag all members ===
-
-@bot.on(events.NewMessage(pattern='/start'))
-async def start_handler(event):
-    """Handle the /start command"""
-    user_id = event.sender_id
-    started_users.add(user_id)
-    
-    await event.respond("👋 Welcome to the User Tagger Bot!\n\n"
-                       "📌 Commands:\n"
-                       "• /all [text] - Tag all users in the group\n"
-                       "• utag [text] - Tag all users in the group\n"
-                       "• /broadcast [message] - Send message to all users and groups (admin only)\n\n"
-                       "Reply to a message with /all or utag to tag users while referencing that message.")
-
-@bot.on(events.NewMessage(pattern=r'(/all|utag)(\s+.*)?'))
-async def tag_all_handler(event):
-    """Handle the /all or utag command to tag all users"""
-    chat = await event.get_chat()
-    
-    # Check if this is a group
-    if not isinstance(chat, (PeerChannel, PeerChat)) and not hasattr(chat, 'megagroup') and not getattr(chat, 'broadcast', False):
-        await event.respond("This command can only be used in groups!")
-        return
-    
-    # Check if user has started the bot
-    if event.sender_id not in started_users:
-        await event.respond("Please start the bot by sending /start in private chat first!")
-        return
-    
-    # Get optional text after the command
-    command = event.pattern_match.group(1)
-    extra_text = event.pattern_match.group(2)
-    
-    if extra_text:
-        extra_text = extra_text.strip()
-    else:
-        extra_text = ""
-    
-    # Get all participants in the chat
-    try:
-        participants = await bot.get_participants(chat)
-    except Exception as e:
-        logger.error(f"Error getting participants: {e}")
-        await event.respond("Failed to get group members. Make sure I have the right permissions!")
-        return
-    
-    # Filter out bots and the sender
-    valid_participants = [user for user in participants if not user.bot and user.id != event.sender_id]
-    
-    # Create chunks of users to tag (5 users per message)
-    chunk_size = 5
-    user_chunks = [valid_participants[i:i + chunk_size] for i in range(0, len(valid_participants), chunk_size)]
-    
-    # Handle reply to a message
-    if event.reply_to:
-        replied_msg = await event.get_reply_message()
-        reply_to_msg_id = replied_msg.id
-    else:
-        reply_to_msg_id = None
-    
-    # Send the extra text if provided
-    if extra_text and user_chunks:
-        await bot.send_message(
-            entity=chat.id,
-            message=extra_text,
-            reply_to=reply_to_msg_id
-        )
-        # For subsequent tag messages, we'll reply to our own message
-        if reply_to_msg_id:
-            last_msg = await bot.get_messages(chat.id, ids=1)
-            if last_msg:
-                reply_to_msg_id = last_msg[0].id
-    
-    # Send tags in chunks with the specified format
-    for chunk in user_chunks:
-        tag_text = ""
-        for user in chunk:
-            first_name = user.first_name or "User"  # Fallback if first_name is None
-            mention = f"[{first_name}](tg://user?id={user.id})"
-            tag_text += f"🔹{mention}\n"
-        
-        if tag_text:
-            await bot.send_message(
-                entity=chat.id,
-                message=tag_text,
-                reply_to=reply_to_msg_id,
-                parse_mode='markdown'
-            )
-            await asyncio.sleep(2)  # Avoid flood limits
-    
-    # Add group to known groups
-    if chat.id not in bot_groups:
-        bot_groups.add(chat.id)
-
-@bot.on(events.NewMessage(pattern=r'/broadcast(\s+.+)?'))
-async def broadcast_handler(event):
-    """Handle the /broadcast command to send a message to all users and groups"""
-    sender = await event.get_sender()
-    
-    # Check if the user is an admin
-    if sender.id not in admin_users:
-        await event.respond("You don't have permission to use this command!")
-        return
-    
-    # Get the message to broadcast
-    broadcast_text = event.pattern_match.group(1)
-    if not broadcast_text:
-        await event.respond("Please provide a message to broadcast!\nUsage: /broadcast [message]")
-        return
-    
-    broadcast_text = broadcast_text.strip()
-    
-    # Add a timestamp and sender info to the broadcast
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    footer = f"\n\n🔄 Broadcast by Admin on {timestamp}"
-    full_message = f"{broadcast_text}{footer}"
-    
-    # Counter for successful sends
-    sent_count = 0
-    total_targets = len(started_users) + len(bot_groups)
-    
-    status_msg = await event.respond(f"🔄 Broadcasting message to {total_targets} targets...")
-    
-    # Send to all users who started the bot
-    for user_id in started_users:
-        try:
-            await bot.send_message(user_id, full_message)
-            sent_count += 1
-            await asyncio.sleep(0.5)  # Avoid flood limits
-        except Exception as e:
-            logger.error(f"Failed to send broadcast to user {user_id}: {e}")
-    
-    # Send to all groups
-    for group_id in bot_groups:
-        try:
-            await bot.send_message(group_id, full_message)
-            sent_count += 1
-            await asyncio.sleep(0.5)  # Avoid flood limits
-        except Exception as e:
-            logger.error(f"Failed to send broadcast to group {group_id}: {e}")
-    
-    await bot.edit_message(entity=status_msg.chat_id, message=status_msg.id, 
-                         text=f"✅ Broadcast completed! Message sent to {sent_count}/{total_targets} targets.")
-
-@bot.on(events.ChatAction)
-async def chat_action_handler(event):
-    """Track when the bot is added to groups"""
-    if event.user_added and bot.uid in event.user_ids:
-        # Bot was added to a group
-        chat = await event.get_chat()
-        bot_groups.add(chat.id)
-        
-        await event.respond("👋 Hello everyone! I'm User Tagger Bot.\n\n"
-                           "To use me, first send me a /start command in private chat.\n"
-                           "Then you can use /all or utag commands to tag all users in this group!")
-
-async def main():
-    # Start the bot
-    await bot.start(bot_token=BOT_TOKEN)
-    
-    # Get the bot entity to find its ID
-    bot_info = await bot.get_me()
-    bot.uid = bot_info.id
-    
-    print(f"Bot @{bot_info.username} started successfully!")
-    
-# === /cancel clear tag ===
-@bot.on(events.NewMessage(pattern=r"/cancel"))
-@admin_only
-async def cancel(event):
-    await event.respond("Command canceled.")
 
 # === /info command ===
 @bot.on(events.NewMessage(pattern=r"/info"))
@@ -496,5 +336,112 @@ async def mention_afk_checker(event):
         await event.reply(f"Welcome back, {name}! You were away for {duration}.")
 
 
+# /all or utag handler
+@bot.on(events.NewMessage(pattern=r'(/all|utag)(\s+.*)?'))
+async def tag_all_handler(event):
+    chat = await event.get_chat()
+    if not isinstance(chat, (PeerChannel, PeerChat)) and not getattr(chat, 'megagroup', False):
+        await event.respond("This command can only be used in groups!")
+        return
+
+    if event.sender_id not in started_users:
+        await event.respond("Please start the bot by sending /start in private chat first!")
+        return
+
+    command = event.pattern_match.group(1)
+    extra_text = event.pattern_match.group(2)
+    extra_text = extra_text.strip() if extra_text else ""
+
+    try:
+        participants = await bot.get_participants(chat)
+    except Exception as e:
+        logger.error(f"Error getting participants: {e}")
+        await event.respond("Failed to get group members. Make sure I have the right permissions!")
+        return
+
+    valid_participants = [user for user in participants if not user.bot and user.id != event.sender_id]
+    chunk_size = 5
+    user_chunks = [valid_participants[i:i + chunk_size] for i in range(0, len(valid_participants), chunk_size)]
+
+    reply_to_msg_id = None
+    if event.reply_to:
+        replied_msg = await event.get_reply_message()
+        reply_to_msg_id = replied_msg.id
+
+    if extra_text and user_chunks:
+        msg = await bot.send_message(chat.id, extra_text, reply_to=reply_to_msg_id)
+        reply_to_msg_id = msg.id
+
+    for chunk in user_chunks:
+        tag_text = ""
+        for user in chunk:
+            first_name = user.first_name or "User"
+            mention = f"[{first_name}](tg://user?id={user.id})"
+            tag_text += f"🔹{mention}\n"
+        await bot.send_message(chat.id, tag_text, reply_to=reply_to_msg_id, parse_mode='markdown')
+        await asyncio.sleep(2)
+
+    if chat.id not in bot_groups:
+        bot_groups.add(chat.id)
+
+# /broadcast handler
+@bot.on(events.NewMessage(pattern=r'/broadcast(\s+.+)?'))
+async def broadcast_handler(event):
+    sender = await event.get_sender()
+    if sender.id not in admin_users:
+        await event.respond("You don't have permission to use this command!")
+        return
+
+    broadcast_text = event.pattern_match.group(1)
+    if not broadcast_text:
+        await event.respond("Please provide a message to broadcast!\nUsage: /broadcast [message]")
+        return
+    broadcast_text = broadcast_text.strip()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    footer = f"\n\n🔄 Broadcast by Admin on {timestamp}"
+    full_message = f"{broadcast_text}{footer}"
+    sent_count = 0
+    total_targets = len(started_users) + len(bot_groups)
+    status_msg = await event.respond(f"🔄 Broadcasting message to {total_targets} targets...")
+
+    for user_id in started_users:
+        try:
+            await bot.send_message(user_id, full_message)
+            sent_count += 1
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.error(f"Failed to send to user {user_id}: {e}")
+
+    for group_id in bot_groups:
+        try:
+            await bot.send_message(group_id, full_message)
+            sent_count += 1
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.error(f"Failed to send to group {group_id}: {e}")
+
+    await bot.edit_message(status_msg.chat_id, status_msg.id,
+                           f"✅ Broadcast completed! Message sent to {sent_count}/{total_targets} targets.")
+
+# Bot added to group handler
+@bot.on(events.ChatAction)
+async def chat_action_handler(event):
+    if event.user_added and bot.uid in event.user_ids:
+        chat = await event.get_chat()
+        bot_groups.add(chat.id)
+        await event.respond("👋 Hello everyone! I'm User Tagger Bot.\n\n"
+                            "To use me, first send me a /start command in private chat.\n"
+                            "Then you can use /all or utag commands to tag all users in this group!")
+
+# Main function
+async def main():
+    bot_info = await bot.get_me()
+    bot.uid = bot_info.id
+    print(f"Bot @{bot_info.username} started successfully!")
+    await bot.run_until_disconnected()
+
+if __name__ == '__main__':
+    asyncio.run(main())
+    
 print("Bot is running...")
 bot.run_until_disconnected()
