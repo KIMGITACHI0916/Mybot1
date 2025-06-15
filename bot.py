@@ -38,6 +38,7 @@ def admin_only(func):
             return await event.reply("You need to be an admin to use this command.")
         return await func(event)
     return wrapper
+    
 # ==help==
 @bot.on(events.NewMessage(pattern=r"/help"))
 async def help_command(event):
@@ -194,7 +195,7 @@ async def info(event):
         f"Link: [Click Here](tg://user?id={user.id})"
     )
     await event.reply(info_text, parse_mode="md")
-
+    
 # === /purge ===
 @bot.on(events.NewMessage(pattern=r"/purge"))
 async def purge(event):
@@ -288,51 +289,55 @@ async def mention_afk_checker(event):
         return
 
     # === (1) Check for AFK users in mentions ===
-    for entity in event.message.entities or []:
-        if isinstance(entity, (types.MessageEntityMention, types.MessageEntityMentionName)):
-            user_id = None
-            if isinstance(entity, types.MessageEntityMentionName):
-                user_id = entity.user_id
-            elif isinstance(entity, types.MessageEntityMention):
-                username = event.raw_text[entity.offset:entity.offset + entity.length]
-                if username.startswith("@"):
-                    username = username[1:]
-                try:
-                    user = await bot.get_entity(username)
-                    user_id = user.id
-                except:
-                    continue
+for entity in event.message.entities or []:
+    user_id = None
+    if isinstance(entity, types.MessageEntityMentionName):
+        user_id = entity.user_id
+    elif isinstance(entity, types.MessageEntityMention):
+        username = event.raw_text[entity.offset:entity.offset + entity.length]
+        if username.startswith("@"):
+            username = username[1:]
+        try:
+            user = await bot.get_entity(username)
+            user_id = user.id
+        except:
+            continue
 
-            if user_id and user_id in AFK_USERS:
-                afk_data = AFK_USERS[user_id]
-                name = afk_data.get("name")
-                reason = afk_data.get("reason")
-                since = time.time() - afk_data.get("time")
-                duration = int(since)
-                msg = f"{name} is AFK: {reason}\nAFK for {duration}s"
-                await event.reply(msg)
-                break
-
-    # === (2) Check if message is replying to an AFK user ===
-    if event.is_reply:
-        reply_msg = await event.get_reply_message()
-        if reply_msg.sender_id in AFK_USERS:
-            afk_data = AFK_USERS[reply_msg.sender_id]
-            name = afk_data.get("name")
-            reason = afk_data.get("reason")
-            since = time.time() - afk_data.get("time")
-            duration = int(since)
-            msg = f"{name} is AFK: {reason}\nAFK for {duration}s"
-            await event.reply(msg)
-
-    # === (3) Remove AFK if sender was AFK ===
-    if event.sender_id in AFK_USERS:
-        afk_data = AFK_USERS[event.sender_id]
+    if user_id and user_id in AFK_USERS:
+        afk_data = AFK_USERS[user_id]
         name = afk_data.get("name")
-        since = time.time() - afk_data.get("time")
-        duration = int(since)
-        del AFK_USERS[event.sender_id]
-        await event.reply(f"Welcome back, {name}! You were away for {duration}s.")
+        reason = afk_data.get("reason")
+        since = int(time.time() - afk_data.get("time"))
+        hours, remainder = divmod(since, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        duration = f"{hours}h {minutes}m {seconds}s"
+        await event.reply(f"💤 **{name}** is AFK\n🕒 Since: {duration}\n📌 Reason: {reason or 'No reason given'}")
+        break
+        
+
+# === (2) Check if message is replying to an AFK user ===
+if event.is_reply:
+    reply_msg = await event.get_reply_message()
+    if reply_msg and reply_msg.sender_id in AFK_USERS:
+        afk_data = AFK_USERS[reply_msg.sender_id]
+        name = afk_data.get("name")
+        reason = afk_data.get("reason")
+        since = int(time.time() - afk_data.get("time"))
+        hours, remainder = divmod(since, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        duration = f"{hours}h {minutes}m {seconds}s"
+        await event.reply(f"💤 **{name}** is AFK\n🕒 Since: {duration}\n📌 Reason: {reason or 'No reason given'}")
+
+# === (3) Remove AFK if sender was AFK ===
+    if event.sender_id in AFK_USERS:
+    afk_data = AFK_USERS[event.sender_id]
+    name = afk_data.get("name")
+    since = int(time.time() - afk_data.get("time"))
+    hours, remainder = divmod(since, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    duration = f"{hours}h {minutes}m {seconds}s"
+    del AFK_USERS[event.sender_id]
+    await event.reply(f"👋 Welcome back, {name}! You were away for {duration}.")
 
                     
                     
