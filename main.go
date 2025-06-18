@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"telegram-go-bot/config"
 	"telegram-go-bot/handlers"
@@ -42,7 +42,7 @@ func main() {
 	go func() {
 		for update := range updates {
 			// Apply anti-flood and anti-edit middlewares
-			if !middlewares.CheckFlood(update) {
+			if middlewares.AntiFlood(update) {
 				continue
 			}
 			if !middlewares.CheckEdit(update) {
