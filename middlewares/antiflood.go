@@ -22,9 +22,9 @@ func AntiFlood(update tgbotapi.Update) bool {
 	now := time.Now().Unix()
 	mu.Lock()
 	defer mu.Unlock()
-	if last, ok := userLastMessage[userID]; ok && now-last < floodInterval {
+	if last, ok := userLastMessage[int(userID)]; ok && now-last < floodInterval {
 		return true // flooding
 	}
-	userLastMessage[userID] = now
+	userLastMessage[int(userID)] = now
 	return false
 }
