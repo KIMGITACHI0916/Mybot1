@@ -45,7 +45,7 @@ func main() {
 			if middlewares.AntiFlood(update) {
 				continue
 			}
-			if !middlewares.CheckEdit(update) {
+			if !middlewares.AntiEdit(update) {
 				continue
 			}
 
